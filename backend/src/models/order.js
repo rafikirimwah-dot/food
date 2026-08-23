@@ -125,4 +125,112 @@ class Order {
     }
 }
 
+// Add admin/util methods inside the Order class
+Order.getAllOrders = async function(status = null, startDate = null, endDate = null) {
+    try {
+        let query = `
+            SELECT o.*, 
+                   u.username as client_name, 
+                   u.phone as client_phone,
+                   d.username as delivery_name,
+                   d.phone as delivery_phone
+            FROM orders o
+            LEFT JOIN users u ON o.client_id = u.id
+            LEFT JOIN users d ON o.delivery_person_id = d.id
+            WHERE 1=1
+        `;
+        const values = [];
+        
+        if (status) {
+            query += ' AND o.status = ?';
+            values.push(status);
+        }
+        
+        if (startDate) {
+            query += ' AND DATE(o.created_at) >= ?';
+            values.push(startDate);
+        }
+        
+        if (endDate) {
+            query += ' AND DATE(o.created_at) <= ?';
+            values.push(endDate);
+        }
+        
+        query += ' ORDER BY o.created_at DESC';
+        
+        const [rows] = await db.query(query, values);
+        return rows.map(row => {
+            if (typeof row.items === 'string') {
+                row.items = JSON.parse(row.items);
+            }
+            return row;
+        });
+    } catch (error) {
+        console.error('Get all orders error:', error);
+        return [];
+    }
+};
+
+Order.getRevenueStats = async function(period = 'monthly') {
+    try {
+        let groupBy;
+        switch(period) {
+            case 'daily':
+                groupBy = 'DATE(created_at)';
+                break;
+            case 'weekly':
+                groupBy = 'YEARWEEK(created_at)';
+                break;
+            case 'monthly':
+            default:
+                groupBy = 'DATE_FORMAT(created_at, "%Y-%m")';
+                break;
+        }
+        
+        const [rows] = await db.query(`
+            SELECT 
+                ${groupBy} as period,
+                COUNT(*) as total_orders,
+                SUM(total_amount) as total_revenue,
+                AVG(total_amount) as average_order_value,
+                SUM(CASE WHEN status = 'delivered' THEN total_amount ELSE 0 END) as delivered_revenue
+            FROM orders
+            WHERE status IN ('delivered', 'confirmed', 'preparing', 'picked_up', 'in_transit')
+            GROUP BY ${groupBy}
+            ORDER BY period DESC
+            LIMIT 12
+        `);
+        
+        return rows;
+    } catch (error) {
+        console.error('Get revenue stats error:', error);
+        return [];
+    }
+};
+
+Order.findByOrderNumber = async function(orderNumber) {
+    try {
+        const [rows] = await db.query(`
+            SELECT o.*, 
+                   u.username as client_name, 
+                   u.phone as client_phone,
+                   d.username as delivery_name,
+                   d.phone as delivery_phone
+            FROM orders o
+            LEFT JOIN users u ON o.client_id = u.id
+            LEFT JOIN users d ON o.delivery_person_id = d.id
+            WHERE o.order_number = ?
+        `, [orderNumber]);
+        
+        if (rows.length && typeof rows[0].items === 'string') {
+            rows[0].items = JSON.parse(rows[0].items);
+        }
+        
+        return rows[0];
+    } catch (error) {
+        console.error('FindByOrderNumber error:', error);
+        return null;
+    }
+};
+
 module.exports = Order;
