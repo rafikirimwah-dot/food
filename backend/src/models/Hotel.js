@@ -37,6 +37,20 @@ class Hotel {
         }
     }
 
+    // Finds a hotel by name
+    static async findByName(name) {
+        try {
+            const [rows] = await db.query(
+                'SELECT * FROM hotels WHERE name = ?',
+                [name]
+            );
+            return rows[0];
+        } catch (error) {
+            console.error('FindByName hotel error:', error);
+            return null;
+        }
+    }
+
     // Gets menu items for a specific hotel
     static async getMenu(hotelId) {
         try {

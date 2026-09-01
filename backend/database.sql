@@ -2,8 +2,8 @@
 -- Creates the complete food delivery database
 -- ============================================
 
-CREATE DATABASE IF NOT EXISTS food_delivery;
-USE food_delivery;
+CREATE DATABASE IF NOT EXISTS food;
+USE food;
 
 -- ============================================
 -- Creates users table for all system users

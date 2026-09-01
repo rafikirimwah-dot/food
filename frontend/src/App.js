@@ -1,29 +1,41 @@
+// ============================================
+// Food Delivery App - Complete Frontend
+// Features: Multi-hotel browsing, ordering, commission system
+// ============================================
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 
-// ============================================
-// API CONFIGURATION
-// ============================================
+// API Configuration
 const API_URL = 'http://localhost:5000/api';
 
-// ============================================
-// COMPONENT: App
-// ============================================
 function App() {
+  // ============================================
+  // STATE MANAGEMENT
+  // ============================================
   const [isScrolled, setIsScrolled] = useState(false);
   const [mobileMenu, setMobileMenu] = useState(false);
+  const [hoveredHotel, setHoveredHotel] = useState(null);
   const [hoveredFood, setHoveredFood] = useState(null);
-  const [foods, setFoods] = useState([]);
+  
+  // Data states
+  const [hotels, setHotels] = useState([]);
+  const [selectedHotel, setSelectedHotel] = useState(null);
+  const [menuItems, setMenuItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  
+  // Auth states
   const [user, setUser] = useState(null);
   const [token, setToken] = useState(localStorage.getItem('token'));
   const [showLogin, setShowLogin] = useState(false);
+  const [authError, setAuthError] = useState('');
+  
+  // Cart states
   const [cart, setCart] = useState([]);
+  const [showCart, setShowCart] = useState(false);
   const [orders, setOrders] = useState([]);
-  const [showOrderModal, setShowOrderModal] = useState(false);
-  const [selectedFood, setSelectedFood] = useState(null);
-
+  const [showOrders, setShowOrders] = useState(false);
+  
   // Login form state
   const [loginData, setLoginData] = useState({
     email: '',
@@ -34,18 +46,24 @@ function App() {
     email: '',
     password: '',
     phone: '',
-    address: ''
+    address: '',
+    role: 'user'
   });
-  const [authError, setAuthError] = useState('');
 
-  // Fetch foods on component mount
+  // ============================================
+  // EFFECTS
+  // ============================================
+  
+  // Fetch hotels on component mount
   useEffect(() => {
-    fetchFoods();
+    fetchHotels();
     if (token) {
       fetchUserProfile();
+      fetchUserOrders();
     }
   }, []);
 
+  // Scroll handler for navbar
   useEffect(() => {
     const handleScroll = () => {
       setIsScrolled(window.scrollY > 50);
@@ -58,16 +76,31 @@ function App() {
   // API FUNCTIONS
   // ============================================
 
-  // Fetch foods from backend
-  const fetchFoods = async () => {
+  // Fetch all hotels
+  const fetchHotels = async () => {
     try {
       setLoading(true);
-      const response = await axios.get(`${API_URL}/foods`);
-      setFoods(response.data);
+      const response = await axios.get(`${API_URL}/hotels`);
+      setHotels(response.data);
       setError('');
     } catch (err) {
-      console.error('Error fetching foods:', err);
-      setError('Failed to load foods. Please make sure the backend is running.');
+      console.error('Error fetching hotels:', err);
+      setError('Failed to load hotels. Please make sure the backend is running.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Fetch hotel menu
+  const fetchHotelMenu = async (hotelId) => {
+    try {
+      setLoading(true);
+      const response = await axios.get(`${API_URL}/hotels/${hotelId}/menu`);
+      setMenuItems(response.data);
+      setError('');
+    } catch (err) {
+      console.error('Error fetching menu:', err);
+      setError('Failed to load menu');
     } finally {
       setLoading(false);
     }
@@ -79,7 +112,7 @@ function App() {
       const response = await axios.get(`${API_URL}/auth/profile`, {
         headers: { Authorization: `Bearer ${token}` }
       });
-      setUser(response.data);
+      setUser(response.data.user);
     } catch (err) {
       console.error('Error fetching profile:', err);
       localStorage.removeItem('token');
@@ -87,27 +120,27 @@ function App() {
     }
   };
 
-  // Login user
-  const handleLogin = async (e) => {
-    e.preventDefault();
+  // Fetch user orders
+  const fetchUserOrders = async () => {
+    if (!token) return;
     try {
-      const response = await axios.post(`${API_URL}/auth/login`, loginData);
-      const { token, user } = response.data;
-      localStorage.setItem('token', token);
-      setToken(token);
-      setUser(user);
-      setShowLogin(false);
-      setAuthError('');
-      setLoginData({ email: '', password: '' });
-      alert(`Welcome ${user.username}!`);
+      const response = await axios.get(`${API_URL}/orders/my-orders`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setOrders(response.data);
     } catch (err) {
-      setAuthError(err.response?.data?.error || 'Login failed');
+      console.error('Error fetching orders:', err);
     }
   };
+
+  // ============================================
+  // AUTH FUNCTIONS
+  // ============================================
 
   // Register user
   const handleRegister = async (e) => {
     e.preventDefault();
+    setAuthError('');
     try {
       const response = await axios.post(`${API_URL}/auth/register`, registerData);
       const { token, user } = response.data;
@@ -115,11 +148,33 @@ function App() {
       setToken(token);
       setUser(user);
       setShowLogin(false);
-      setAuthError('');
-      setRegisterData({ username: '', email: '', password: '', phone: '', address: '' });
-      alert(`Welcome ${user.username}! Account created successfully.`);
+      setRegisterData({ username: '', email: '', password: '', phone: '', address: '', role: 'user' });
+      alert(user.role === 'manager' 
+        ? 'Registration successful! Awaiting admin approval.' 
+        : 'Welcome! Account created successfully.');
     } catch (err) {
-      setAuthError(err.response?.data?.error || 'Registration failed');
+      console.error('Registration error:', err);
+      setAuthError(err.response?.data?.error || 'Registration failed. Please try again.');
+    }
+  };
+
+  // Login user
+  const handleLogin = async (e) => {
+    e.preventDefault();
+    setAuthError('');
+    try {
+      const response = await axios.post(`${API_URL}/auth/login`, loginData);
+      const { token, user } = response.data;
+      localStorage.setItem('token', token);
+      setToken(token);
+      setUser(user);
+      setShowLogin(false);
+      setLoginData({ email: '', password: '' });
+      fetchUserOrders();
+      alert(`Welcome back, ${user.username}!`);
+    } catch (err) {
+      console.error('Login error:', err);
+      setAuthError(err.response?.data?.error || 'Login failed. Please check your credentials.');
     }
   };
 
@@ -129,7 +184,12 @@ function App() {
     setToken(null);
     setUser(null);
     setCart([]);
+    setOrders([]);
   };
+
+  // ============================================
+  // CART FUNCTIONS
+  // ============================================
 
   // Add to cart
   const addToCart = (food) => {
@@ -141,7 +201,27 @@ function App() {
     } else {
       setCart([...cart, { ...food, quantity: 1 }]);
     }
-    alert(`${food.name} added to cart!`);
+  };
+
+  // Remove from cart
+  const removeFromCart = (foodId) => {
+    setCart(cart.filter(item => item.id !== foodId));
+  };
+
+  // Update quantity
+  const updateQuantity = (foodId, quantity) => {
+    if (quantity <= 0) {
+      removeFromCart(foodId);
+    } else {
+      setCart(cart.map(item => 
+        item.id === foodId ? { ...item, quantity } : item
+      ));
+    }
+  };
+
+  // Calculate cart total
+  const getCartTotal = () => {
+    return cart.reduce((sum, item) => sum + (parseFloat(item.price) * item.quantity), 0);
   };
 
   // Place order
@@ -157,50 +237,59 @@ function App() {
       return;
     }
 
+    if (!selectedHotel) {
+      alert('Please select a hotel first');
+      return;
+    }
+
     try {
       const orderData = {
+        hotel_id: selectedHotel.id,
         items: cart.map(item => ({
           food_id: item.id,
           name: item.name,
-          price: parseFloat(item.price.replace('$', '')),
+          price: parseFloat(item.price),
           quantity: item.quantity
         })),
-        total_amount: cart.reduce((sum, item) => 
-          sum + (parseFloat(item.price.replace('$', '')) * item.quantity), 0
-        ),
-        delivery_address: user.address || '123 Main St, City',
-        payment_method: 'cash'
+        delivery_address: user.address || 'Please update your address in profile',
+        delivery_instructions: '',
+        payment_method: 'simulated'
       };
 
       const response = await axios.post(`${API_URL}/orders`, orderData, {
         headers: { Authorization: `Bearer ${token}` }
       });
 
-      alert('Order placed successfully! Order #' + response.data.order_number);
+      alert(`Order placed successfully! Order #${response.data.order?.order_number || ''}\n\nHotel: ${selectedHotel.name}\nTotal: $${getCartTotal().toFixed(2)}\n\nPayment will be processed by admin.`);
       setCart([]);
-      setShowOrderModal(false);
-      fetchOrders();
+      setShowCart(false);
+      fetchUserOrders();
     } catch (err) {
       console.error('Error placing order:', err);
       alert('Failed to place order: ' + (err.response?.data?.error || 'Unknown error'));
     }
   };
 
-  // Fetch orders
-  const fetchOrders = async () => {
-    if (!token) return;
-    try {
-      const response = await axios.get(`${API_URL}/orders/client`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      setOrders(response.data);
-    } catch (err) {
-      console.error('Error fetching orders:', err);
-    }
+  // ============================================
+  // HOTEL FUNCTIONS
+  // ============================================
+
+  // Select a hotel
+  const selectHotel = async (hotel) => {
+    setSelectedHotel(hotel);
+    await fetchHotelMenu(hotel.id);
+    // Scroll to menu section
+    document.getElementById('menu-section')?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  // Go back to hotels list
+  const goBackToHotels = () => {
+    setSelectedHotel(null);
+    setMenuItems([]);
   };
 
   // ============================================
-  // RENDER FUNCTIONS
+  // RENDER HELPERS
   // ============================================
 
   const renderStars = (rating) => {
@@ -208,7 +297,7 @@ function App() {
       <div style={{ display: 'flex', gap: '2px', justifyContent: 'center' }}>
         {[1, 2, 3, 4, 5].map((i) => (
           <span key={i} style={{ 
-            color: i <= Math.round(rating) ? '#ffc107' : '#ddd',
+            color: i <= Math.round(rating || 0) ? '#ffc107' : '#ddd',
             fontSize: '14px'
           }}>★</span>
         ))}
@@ -216,13 +305,13 @@ function App() {
     );
   };
 
-  // Render cart count
   const cartCount = cart.reduce((sum, item) => sum + item.quantity, 0);
-  const cartTotal = cart.reduce((sum, item) => 
-    sum + (parseFloat(item.price.replace('$', '')) * item.quantity), 0
-  ).toFixed(2);
 
-  if (loading) {
+  // ============================================
+  // RENDER
+  // ============================================
+
+  if (loading && hotels.length === 0) {
     return (
       <div style={styles.loadingContainer}>
         <div style={styles.loadingSpinner}>🍔</div>
@@ -232,11 +321,11 @@ function App() {
     );
   }
 
-  if (error) {
+  if (error && hotels.length === 0) {
     return (
       <div style={styles.errorContainer}>
         <h2 style={{ color: '#ff6b35' }}>⚠️ {error}</h2>
-        <button onClick={fetchFoods} style={styles.primaryBtn}>Retry</button>
+        <button onClick={fetchHotels} style={styles.primaryBtn}>Retry</button>
         <p style={{ marginTop: '20px', color: '#666' }}>
           Make sure backend is running: <br />
           <code style={{ background: '#f0f0f0', padding: '4px 8px', borderRadius: '4px' }}>
@@ -257,7 +346,7 @@ function App() {
         padding: isScrolled ? '15px 0' : '20px 0'
       }}>
         <div style={styles.navContainer}>
-          <div style={styles.logo}>
+          <div style={styles.logo} onClick={() => { goBackToHotels(); window.scrollTo(0, 0); }}>
             <span style={{ fontSize: '30px' }}>🍔</span>
             <span style={{ fontWeight: 700, fontSize: '24px' }}>
               Food<span style={{ color: '#ff6b35' }}>Express</span>
@@ -269,27 +358,32 @@ function App() {
             display: mobileMenu ? 'flex' : 'flex'
           }}>
             <a href="#home" style={styles.navLink}>Home</a>
-            <a href="#features" style={styles.navLink}>Features</a>
-            <a href="#popular" style={styles.navLink}>Menu</a>
+            <a href="#hotels" style={styles.navLink}>Hotels</a>
             {user && (
-              <a href="#orders" style={styles.navLink} onClick={() => {
-                fetchOrders();
-                setShowOrderModal(true);
+              <a href="#" style={styles.navLink} onClick={(e) => {
+                e.preventDefault();
+                fetchUserOrders();
+                setShowOrders(!showOrders);
               }}>My Orders</a>
             )}
           </div>
 
           <div style={styles.navActions}>
-            <button style={styles.cartBtn} onClick={() => setShowOrderModal(true)}>
+            {/* Cart Button */}
+            <button style={styles.cartBtn} onClick={() => setShowCart(!showCart)}>
               🛒
               {cartCount > 0 && (
                 <span style={styles.cartBadge}>{cartCount}</span>
               )}
             </button>
+
+            {/* User Info */}
             {user ? (
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                 <span style={{ fontSize: '14px', fontWeight: 500 }}>
                   👤 {user.username}
+                  {user.role === 'manager' && ' (Manager)'}
+                  {user.role === 'admin' && ' (Admin)'}
                 </span>
                 <button onClick={handleLogout} style={styles.logoutBtn}>
                   Logout
@@ -300,6 +394,7 @@ function App() {
                 Sign In
               </button>
             )}
+            
             <button 
               style={styles.mobileToggle}
               onClick={() => setMobileMenu(!mobileMenu)}
@@ -317,21 +412,21 @@ function App() {
             <div style={styles.heroText}>
               <div style={styles.heroBadge}>
                 <span style={{ fontSize: '20px' }}>🚀</span>
-                <span>Order food now!</span>
+                <span>Order from your favorite hotels!</span>
               </div>
               <h1 style={styles.heroTitle}>
                 <span style={styles.highlight}>Delicious</span> Food,<br />
                 <span style={styles.highlight}>Delivered</span> Fast
               </h1>
               <p style={styles.heroDescription}>
-                Craving something delicious? Order from the best restaurants in town
-                and get your food delivered to your doorstep in minutes.
+                Browse through top hotels in your area. From TIME HOTEL to SANFORD,
+                we've got the best selection of cuisines just for you.
               </p>
               <div style={styles.heroButtons}>
                 <button style={styles.primaryBtn} onClick={() => {
-                  document.getElementById('popular').scrollIntoView({ behavior: 'smooth' });
+                  document.getElementById('hotels').scrollIntoView({ behavior: 'smooth' });
                 }}>
-                  Order Now →
+                  Browse Hotels →
                 </button>
                 <button style={styles.outlineBtn} onClick={() => {
                   document.getElementById('features').scrollIntoView({ behavior: 'smooth' });
@@ -341,18 +436,18 @@ function App() {
               </div>
               <div style={styles.heroStats}>
                 <div style={styles.stat}>
-                  <span style={styles.statNumber}>{foods.length * 1000}+</span>
-                  <span style={styles.statLabel}>Happy Customers</span>
-                </div>
-                <div style={styles.statDivider}></div>
-                <div style={styles.stat}>
-                  <span style={styles.statNumber}>{foods.length * 5}+</span>
-                  <span style={styles.statLabel}>Restaurants</span>
+                  <span style={styles.statNumber}>{hotels.length}+</span>
+                  <span style={styles.statLabel}>Hotels</span>
                 </div>
                 <div style={styles.statDivider}></div>
                 <div style={styles.stat}>
                   <span style={styles.statNumber}>98%</span>
                   <span style={styles.statLabel}>Satisfaction</span>
+                </div>
+                <div style={styles.statDivider}></div>
+                <div style={styles.stat}>
+                  <span style={styles.statNumber}>10%</span>
+                  <span style={styles.statLabel}>Commission</span>
                 </div>
               </div>
             </div>
@@ -386,64 +481,117 @@ function App() {
           <p style={styles.sectionSubtitle}>We make ordering food easy, fast, and enjoyable</p>
           <div style={styles.featuresGrid}>
             <div style={styles.featureCard}>
-              <div style={{ fontSize: '3rem', marginBottom: '20px' }}>🚀</div>
-              <h3 style={{ fontSize: '1.3rem', fontWeight: 700, marginBottom: '12px' }}>Fast Delivery</h3>
-              <p style={{ color: '#666', lineHeight: 1.6 }}>Get your food delivered in 30 minutes or less</p>
-            </div>
-            <div style={styles.featureCard}>
-              <div style={{ fontSize: '3rem', marginBottom: '20px' }}>🍽️</div>
-              <h3 style={{ fontSize: '1.3rem', fontWeight: 700, marginBottom: '12px' }}>Top Restaurants</h3>
-              <p style={{ color: '#666', lineHeight: 1.6 }}>Curated selection of the best local restaurants</p>
+              <div style={{ fontSize: '3rem', marginBottom: '20px' }}>🏨</div>
+              <h3 style={{ fontSize: '1.3rem', fontWeight: 700, marginBottom: '12px' }}>Top Hotels</h3>
+              <p style={{ color: '#666', lineHeight: 1.6 }}>Curated selection of the best local hotels</p>
             </div>
             <div style={styles.featureCard}>
               <div style={{ fontSize: '3rem', marginBottom: '20px' }}>💰</div>
-              <h3 style={{ fontSize: '1.3rem', fontWeight: 700, marginBottom: '12px' }}>Best Prices</h3>
-              <p style={{ color: '#666', lineHeight: 1.6 }}>Competitive prices and exclusive deals</p>
+              <h3 style={{ fontSize: '1.3rem', fontWeight: 700, marginBottom: '12px' }}>Commission System</h3>
+              <p style={{ color: '#666', lineHeight: 1.6 }}>10% admin commission, fair for everyone</p>
             </div>
             <div style={styles.featureCard}>
               <div style={{ fontSize: '3rem', marginBottom: '20px' }}>🔒</div>
               <h3 style={{ fontSize: '1.3rem', fontWeight: 700, marginBottom: '12px' }}>Secure Payment</h3>
               <p style={{ color: '#666', lineHeight: 1.6 }}>Safe and secure payment methods</p>
             </div>
+            <div style={styles.featureCard}>
+              <div style={{ fontSize: '3rem', marginBottom: '20px' }}>🚀</div>
+              <h3 style={{ fontSize: '1.3rem', fontWeight: 700, marginBottom: '12px' }}>Fast Delivery</h3>
+              <p style={{ color: '#666', lineHeight: 1.6 }}>Get your food delivered in 30 minutes or less</p>
+            </div>
           </div>
         </div>
       </section>
 
-      {/* ===== POPULAR FOODS SECTION ===== */}
-      <section id="popular" style={styles.popularFoods}>
+      {/* ===== HOTELS SECTION ===== */}
+      <section id="hotels" style={styles.hotelsSection}>
         <div style={styles.container}>
-          <h2 style={styles.sectionTitle}>Popular Foods</h2>
-          <p style={styles.sectionSubtitle}>Discover our most loved dishes by our customers</p>
-          <div style={styles.foodsGrid}>
-            {foods.map((food) => (
-              <div 
-                key={food.id}
-                style={{
-                  ...styles.foodCard,
-                  transform: hoveredFood === food.id ? 'translateY(-8px)' : 'none',
-                  boxShadow: hoveredFood === food.id ? '0 15px 40px rgba(0,0,0,0.12)' : '0 5px 20px rgba(0,0,0,0.06)'
-                }}
-                onMouseEnter={() => setHoveredFood(food.id)}
-                onMouseLeave={() => setHoveredFood(null)}
-              >
-                <div style={{ fontSize: '4rem', marginBottom: '15px' }}>{food.emoji || '🍽️'}</div>
-                <h3 style={{ fontSize: '1.2rem', fontWeight: 700, marginBottom: '8px' }}>{food.name}</h3>
-                <p style={{ color: '#666', fontSize: '0.9rem', marginBottom: '12px' }}>{food.description}</p>
-                {renderStars(food.rating || 4.5)}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '15px' }}>
-                  <span style={{ fontSize: '1.3rem', fontWeight: 700, color: '#ff6b35' }}>
-                    ${food.price}
-                  </span>
-                  <button 
-                    style={styles.orderBtn}
-                    onClick={() => addToCart(food)}
-                  >
-                    + Add
-                  </button>
+          <h2 style={styles.sectionTitle}>Our Hotels</h2>
+          <p style={styles.sectionSubtitle}>Choose from the best hotels in town</p>
+          
+          {selectedHotel ? (
+            // Hotel Menu View
+            <div>
+              <div style={styles.hotelHeader}>
+                <button onClick={goBackToHotels} style={styles.backBtn}>← Back to Hotels</button>
+                <div style={styles.hotelInfo}>
+                  <h2>{selectedHotel.name}</h2>
+                  <p>{selectedHotel.description}</p>
+                  <div style={styles.hotelMeta}>
+                    <span>⭐ {selectedHotel.rating || 4.5}</span>
+                    <span>🍽️ {selectedHotel.cuisine_type || 'Various'}</span>
+                    <span>📍 {selectedHotel.address}</span>
+                  </div>
                 </div>
               </div>
-            ))}
-          </div>
+              
+              <div id="menu-section" style={styles.menuGrid}>
+                {menuItems.length === 0 ? (
+                  <p style={{ textAlign: 'center', padding: '40px', color: '#666' }}>
+                    No menu items available for this hotel
+                  </p>
+                ) : (
+                  menuItems.map((food) => (
+                    <div 
+                      key={food.id}
+                      style={{
+                        ...styles.foodCard,
+                        transform: hoveredFood === food.id ? 'translateY(-5px)' : 'none'
+                      }}
+                      onMouseEnter={() => setHoveredFood(food.id)}
+                      onMouseLeave={() => setHoveredFood(null)}
+                    >
+                      <div style={{ fontSize: '3rem' }}>{food.emoji || '🍽️'}</div>
+                      <h4 style={{ fontSize: '1.1rem', fontWeight: 700, margin: '10px 0 5px' }}>{food.name}</h4>
+                      <p style={{ color: '#666', fontSize: '0.85rem' }}>{food.description}</p>
+                      <p style={{ fontSize: '1.2rem', fontWeight: 'bold', color: '#ff6b35', margin: '10px 0' }}>
+                        ${food.price}
+                      </p>
+                      <button 
+                        style={styles.addBtn}
+                        onClick={() => addToCart(food)}
+                      >
+                        Add to Cart
+                      </button>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          ) : (
+            // Hotels Grid View
+            <div style={styles.hotelsGrid}>
+              {hotels.map((hotel) => (
+                <div 
+                  key={hotel.id}
+                  style={{
+                    ...styles.hotelCard,
+                    transform: hoveredHotel === hotel.id ? 'translateY(-8px)' : 'none',
+                    boxShadow: hoveredHotel === hotel.id ? '0 15px 40px rgba(0,0,0,0.12)' : '0 5px 20px rgba(0,0,0,0.06)'
+                  }}
+                  onMouseEnter={() => setHoveredHotel(hotel.id)}
+                  onMouseLeave={() => setHoveredHotel(null)}
+                  onClick={() => selectHotel(hotel)}
+                >
+                  <div style={{ fontSize: '4rem', marginBottom: '10px' }}>
+                    {hotel.id === 1 && '🏨'}
+                    {hotel.id === 2 && '🌍'}
+                    {hotel.id === 3 && '🍗'}
+                    {hotel.id === 4 && '🐔'}
+                    {hotel.id === 5 && '🦞'}
+                  </div>
+                  <h3 style={{ fontSize: '1.3rem', fontWeight: 700 }}>{hotel.name}</h3>
+                  <p style={{ color: '#666', fontSize: '0.9rem', margin: '5px 0' }}>{hotel.description}</p>
+                  <div style={styles.hotelMeta}>
+                    <span>⭐ {hotel.rating || 4.5}</span>
+                    <span>🍽️ {hotel.cuisine_type || 'Various'}</span>
+                  </div>
+                  <button style={styles.viewMenuBtn}>View Menu →</button>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </section>
 
@@ -456,14 +604,14 @@ function App() {
                 Ready to order?
               </h2>
               <p style={{ fontSize: '1.1rem', color: 'rgba(255,255,255,0.9)', marginBottom: '25px' }}>
-                {user ? 'Start adding items to your cart now!' : 'Sign in to start ordering your favorite food!'}
+                {user ? 'Browse our hotels and start ordering now!' : 'Sign in to start ordering your favorite food!'}
               </p>
               <div style={{ display: 'flex', gap: '15px', flexWrap: 'wrap' }}>
                 {user ? (
                   <button style={styles.appStoreBtn} onClick={() => {
-                    document.getElementById('popular').scrollIntoView({ behavior: 'smooth' });
+                    document.getElementById('hotels').scrollIntoView({ behavior: 'smooth' });
                   }}>
-                    🛒 Browse Menu
+                    🛒 Browse Hotels
                   </button>
                 ) : (
                   <button style={styles.appStoreBtn} onClick={() => setShowLogin(true)}>
@@ -554,18 +702,40 @@ function App() {
                 onChange={(e) => setRegisterData({...registerData, address: e.target.value})}
                 style={styles.authInput}
               />
+              <select
+                value={registerData.role}
+                onChange={(e) => setRegisterData({...registerData, role: e.target.value})}
+                style={styles.authInput}
+              >
+                <option value="user">Customer</option>
+                <option value="manager">Hotel Manager</option>
+              </select>
+              {registerData.role === 'manager' && (
+                <input
+                  type="text"
+                  placeholder="Hotel Name"
+                  onChange={(e) => setRegisterData({...registerData, hotel_name: e.target.value})}
+                  style={styles.authInput}
+                />
+              )}
               <button type="submit" style={styles.authSubmitBtn}>Register</button>
             </form>
           </div>
         </div>
       )}
 
-      {/* ===== CART/ORDER MODAL ===== */}
-      {showOrderModal && (
-        <div style={styles.modalOverlay} onClick={() => setShowOrderModal(false)}>
+      {/* ===== CART MODAL ===== */}
+      {showCart && (
+        <div style={styles.modalOverlay} onClick={() => setShowCart(false)}>
           <div style={{...styles.modal, maxWidth: '600px'}} onClick={(e) => e.stopPropagation()}>
-            <button style={styles.modalClose} onClick={() => setShowOrderModal(false)}>✕</button>
+            <button style={styles.modalClose} onClick={() => setShowCart(false)}>✕</button>
             <h2 style={{ marginBottom: '20px' }}>🛒 Your Cart</h2>
+            
+            {!selectedHotel && cart.length > 0 && (
+              <p style={{ color: '#ff6b35', marginBottom: '10px' }}>
+                ⚠️ Please select a hotel first before ordering
+              </p>
+            )}
             
             {cart.length === 0 ? (
               <div style={{ textAlign: 'center', padding: '30px 0' }}>
@@ -573,9 +743,9 @@ function App() {
                 <p style={{ color: '#666' }}>Your cart is empty</p>
                 <button 
                   style={styles.primaryBtn}
-                  onClick={() => setShowOrderModal(false)}
+                  onClick={() => setShowCart(false)}
                 >
-                  Browse Menu
+                  Browse Hotels
                 </button>
               </div>
             ) : (
@@ -587,15 +757,23 @@ function App() {
                       <h4>{item.name}</h4>
                       <span style={{ color: '#666' }}>${item.price} x {item.quantity}</span>
                     </div>
-                    <span style={{ fontWeight: 'bold', color: '#ff6b35' }}>
-                      ${(parseFloat(item.price.replace('$', '')) * item.quantity).toFixed(2)}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <button 
+                        style={styles.qtyBtn}
+                        onClick={() => updateQuantity(item.id, item.quantity - 1)}
+                      >-</button>
+                      <span>{item.quantity}</span>
+                      <button 
+                        style={styles.qtyBtn}
+                        onClick={() => updateQuantity(item.id, item.quantity + 1)}
+                      >+</button>
+                    </div>
+                    <span style={{ fontWeight: 'bold', color: '#ff6b35', minWidth: '60px' }}>
+                      ${(parseFloat(item.price) * item.quantity).toFixed(2)}
                     </span>
                     <button 
                       style={styles.removeBtn}
-                      onClick={() => {
-                        const newCart = cart.filter(c => c.id !== item.id);
-                        setCart(newCart);
-                      }}
+                      onClick={() => removeFromCart(item.id)}
                     >
                       ✕
                     </button>
@@ -604,20 +782,132 @@ function App() {
                 <div style={styles.cartTotal}>
                   <span>Total:</span>
                   <span style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#ff6b35' }}>
-                    ${cartTotal}
+                    ${getCartTotal().toFixed(2)}
                   </span>
                 </div>
                 <button 
                   style={{...styles.primaryBtn, width: '100%', marginTop: '15px'}}
                   onClick={placeOrder}
+                  disabled={!selectedHotel}
                 >
-                  Place Order
+                  {selectedHotel ? `Place Order (${selectedHotel.name})` : 'Select a Hotel First'}
                 </button>
               </>
             )}
           </div>
         </div>
       )}
+
+      {/* ===== ORDERS MODAL ===== */}
+      {showOrders && (
+        <div style={styles.modalOverlay} onClick={() => setShowOrders(false)}>
+          <div style={{...styles.modal, maxWidth: '700px'}} onClick={(e) => e.stopPropagation()}>
+            <button style={styles.modalClose} onClick={() => setShowOrders(false)}>✕</button>
+            <h2 style={{ marginBottom: '20px' }}>📋 My Orders</h2>
+            
+            {orders.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '30px 0' }}>
+                <p style={{ fontSize: '3rem' }}>📋</p>
+                <p style={{ color: '#666' }}>No orders yet</p>
+                <button 
+                  style={styles.primaryBtn}
+                  onClick={() => {
+                    setShowOrders(false);
+                    document.getElementById('hotels').scrollIntoView({ behavior: 'smooth' });
+                  }}
+                >
+                  Start Ordering
+                </button>
+              </div>
+            ) : (
+              <div>
+                {orders.map((order) => (
+                  <div key={order.id} style={styles.orderCard}>
+                    <div style={styles.orderHeader}>
+                      <span style={{ fontWeight: 'bold' }}>#{order.order_number}</span>
+                      <span style={{ 
+                        ...styles.orderStatus,
+                        background: order.status === 'delivered' ? '#28a745' : 
+                                   order.status === 'cancelled' ? '#dc3545' : '#ffc107'
+                      }}>
+                        {order.status}
+                      </span>
+                    </div>
+                    <div style={styles.orderDetails}>
+                      <p><strong>Hotel:</strong> {order.hotel_name}</p>
+                      <p><strong>Total:</strong> ${order.total_amount}</p>
+                      <p><strong>Commission:</strong> ${order.commission}</p>
+                      <p><strong>Date:</strong> {new Date(order.created_at).toLocaleString()}</p>
+                    </div>
+                    {order.status === 'in_transit' && !order.is_delivery_confirmed && (
+                      <button 
+                        style={styles.confirmBtn}
+                        onClick={async () => {
+                          try {
+                            await axios.put(`${API_URL}/orders/${order.id}/confirm`, {}, {
+                              headers: { Authorization: `Bearer ${token}` }
+                            });
+                            alert('Delivery confirmed! Payment will be processed to the hotel.');
+                            fetchUserOrders();
+                          } catch (err) {
+                            alert('Failed to confirm delivery');
+                          }
+                        }}
+                      >
+                        Confirm Delivery
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ===== FOOTER ===== */}
+      <footer style={styles.footer}>
+        <div style={styles.container}>
+          <div style={styles.footerGrid}>
+            <div>
+              <h3 style={{ fontSize: '1.5rem', marginBottom: '15px' }}>
+                🍔 Food<span style={{ color: '#ff6b35' }}>Express</span>
+              </h3>
+              <p style={{ color: '#aaa', maxWidth: '300px' }}>
+                Delivering happiness to your doorstep. Fresh, fast, and always delicious.
+              </p>
+            </div>
+            <div>
+              <h4 style={styles.footerTitle}>Hotels</h4>
+              {hotels.map(h => (
+                <a key={h.id} href="#" style={styles.footerLink} onClick={(e) => {
+                  e.preventDefault();
+                  selectHotel(h);
+                }}>{h.name}</a>
+              ))}
+            </div>
+            <div>
+              <h4 style={styles.footerTitle}>Support</h4>
+              <a href="#" style={styles.footerLink}>Help Center</a>
+              <a href="#" style={styles.footerLink}>Terms of Service</a>
+              <a href="#" style={styles.footerLink}>Privacy Policy</a>
+            </div>
+            <div>
+              <h4 style={styles.footerTitle}>Contact</h4>
+              <p style={{ color: '#aaa' }}>📧 support@foodexpress.com</p>
+              <p style={{ color: '#aaa' }}>📞 +254 700 123456</p>
+              <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
+                <span style={{ fontSize: '24px' }}>🐦</span>
+                <span style={{ fontSize: '24px' }}>📷</span>
+                <span style={{ fontSize: '24px' }}>📘</span>
+              </div>
+            </div>
+          </div>
+          <div style={styles.footerBottom}>
+            <p>© 2024 FoodExpress. All rights reserved. | 10% Admin Commission</p>
+          </div>
+        </div>
+      </footer>
     </div>
   );
 }
@@ -908,25 +1198,75 @@ const styles = {
     cursor: 'default'
   },
 
-  // Popular Foods
-  popularFoods: {
+  // Hotels
+  hotelsSection: {
     padding: '80px 0',
     background: 'white'
   },
-  foodsGrid: {
+  hotelsGrid: {
     display: 'grid',
     gridTemplateColumns: 'repeat(3, 1fr)',
     gap: '30px'
   },
-  foodCard: {
+  hotelCard: {
     background: '#f9f9f9',
-    padding: '25px',
+    padding: '30px',
     borderRadius: '16px',
     textAlign: 'center',
     transition: 'all 0.3s',
-    cursor: 'default'
+    cursor: 'pointer',
+    border: '2px solid transparent'
   },
-  orderBtn: {
+  hotelInfo: {
+    marginBottom: '20px'
+  },
+  hotelMeta: {
+    display: 'flex',
+    justifyContent: 'center',
+    gap: '20px',
+    color: '#666',
+    fontSize: '0.9rem',
+    margin: '10px 0'
+  },
+  viewMenuBtn: {
+    padding: '10px 24px',
+    background: '#ff6b35',
+    color: 'white',
+    border: 'none',
+    borderRadius: '50px',
+    fontWeight: 600,
+    cursor: 'pointer',
+    transition: 'all 0.3s',
+    marginTop: '15px'
+  },
+  hotelHeader: {
+    marginBottom: '30px'
+  },
+  backBtn: {
+    padding: '10px 20px',
+    background: '#f0f0f0',
+    border: 'none',
+    borderRadius: '8px',
+    cursor: 'pointer',
+    fontSize: '14px',
+    fontWeight: 600,
+    marginBottom: '15px'
+  },
+
+  // Menu
+  menuGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(3, 1fr)',
+    gap: '20px'
+  },
+  foodCard: {
+    background: '#f9f9f9',
+    padding: '20px',
+    borderRadius: '12px',
+    textAlign: 'center',
+    transition: 'all 0.3s'
+  },
+  addBtn: {
     padding: '8px 20px',
     background: '#ff6b35',
     color: 'white',
@@ -1021,6 +1361,8 @@ const styles = {
     fontWeight: 600,
     cursor: 'pointer'
   },
+
+  // Cart
   cartItem: {
     display: 'flex',
     alignItems: 'center',
@@ -1035,12 +1377,88 @@ const styles = {
     fontSize: '1.2rem',
     fontWeight: 'bold'
   },
+  qtyBtn: {
+    padding: '4px 10px',
+    background: '#f0f0f0',
+    border: 'none',
+    borderRadius: '4px',
+    cursor: 'pointer',
+    fontSize: '16px',
+    fontWeight: 'bold'
+  },
   removeBtn: {
     background: 'none',
     border: 'none',
     color: '#dc3545',
     fontSize: '18px',
     cursor: 'pointer'
+  },
+
+  // Orders
+  orderCard: {
+    background: '#f9f9f9',
+    padding: '15px',
+    borderRadius: '8px',
+    marginBottom: '15px'
+  },
+  orderHeader: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: '10px'
+  },
+  orderStatus: {
+    padding: '4px 12px',
+    borderRadius: '20px',
+    color: 'white',
+    fontSize: '12px',
+    fontWeight: 'bold',
+    textTransform: 'uppercase'
+  },
+  orderDetails: {
+    fontSize: '14px',
+    color: '#555'
+  },
+  confirmBtn: {
+    padding: '8px 16px',
+    background: '#28a745',
+    color: 'white',
+    border: 'none',
+    borderRadius: '4px',
+    cursor: 'pointer',
+    marginTop: '10px'
+  },
+
+  // Footer
+  footer: {
+    background: '#1a1a1a',
+    color: 'white',
+    padding: '60px 0 20px'
+  },
+  footerGrid: {
+    display: 'grid',
+    gridTemplateColumns: '2fr 1fr 1fr 1fr',
+    gap: '40px',
+    marginBottom: '40px'
+  },
+  footerTitle: {
+    fontSize: '1.1rem',
+    marginBottom: '15px',
+    color: 'white'
+  },
+  footerLink: {
+    display: 'block',
+    color: '#aaa',
+    textDecoration: 'none',
+    marginBottom: '10px',
+    cursor: 'pointer',
+    transition: 'color 0.3s'
+  },
+  footerBottom: {
+    textAlign: 'center',
+    paddingTop: '20px',
+    borderTop: '1px solid #333',
+    color: '#666'
   },
 
   // Section common
@@ -1059,7 +1477,7 @@ const styles = {
 };
 
 // ============================================
-// GLOBAL STYLES (Injected via style tag)
+// GLOBAL STYLES
 // ============================================
 const globalStyles = `
   @keyframes float {
@@ -1080,7 +1498,9 @@ const globalStyles = `
     .hero-image { order: 1 !important; }
     .hero-title { font-size: 3rem !important; }
     .features-grid { grid-template-columns: repeat(2, 1fr) !important; }
-    .foods-grid { grid-template-columns: repeat(2, 1fr) !important; }
+    .hotels-grid { grid-template-columns: repeat(2, 1fr) !important; }
+    .menu-grid { grid-template-columns: repeat(2, 1fr) !important; }
+    .footer-grid { grid-template-columns: 1fr 1fr !important; }
     .image-wrapper { width: 350px !important; height: 350px !important; }
     .food-emoji { font-size: 3rem !important; }
     .floating-card { display: none !important; }
@@ -1088,7 +1508,9 @@ const globalStyles = `
 
   @media (max-width: 576px) {
     .features-grid { grid-template-columns: 1fr !important; }
-    .foods-grid { grid-template-columns: 1fr !important; }
+    .hotels-grid { grid-template-columns: 1fr !important; }
+    .menu-grid { grid-template-columns: 1fr !important; }
+    .footer-grid { grid-template-columns: 1fr !important; }
     .image-wrapper { width: 280px !important; height: 280px !important; }
     .food-emoji { font-size: 2.5rem !important; }
     .hero-stats { flex-wrap: wrap !important; gap: 15px !important; }
