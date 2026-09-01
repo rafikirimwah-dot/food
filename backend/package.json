@@ -1,7 +1,7 @@
 {
   "name": "food-delivery-backend",
-  "version": "1.0.0",
-  "description": "Food delivery backend",
+  "version": "2.0.0",
+  "description": "Multi-vendor food delivery system with commission-based payments",
   "main": "src/app.js",
   "scripts": {
     "start": "node src/app.js",

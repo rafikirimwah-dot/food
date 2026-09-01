@@ -1,58 +1,61 @@
+// ============================================
+// Order routes - Handles all order-related endpoints
+// ============================================
 const express = require('express');
 const router = express.Router();
 const { authenticate, authorize } = require('../middleware/auth');
 const {
-    // Client controllers
+    // User controllers
     createOrder,
-    getClientOrders,
+    getUserOrders,
     getOrderById,
-    getOrderByNumber,
     confirmDelivery,
-    cancelOrder,
     
     // Admin controllers
-    getPendingOrders,
     getAllOrders,
+    getOrderStats,
     assignDelivery,
     updateOrderStatus,
-    getOrderStats,
-    getRevenueStats,
+    
+    // Manager controllers
+    getManagerOrders,
+    updateManagerOrderStatus,
     
     // Delivery controllers
     getDeliveryOrders,
     pickupOrder,
     startDelivery,
-    completeDelivery,
-    trackOrder
+    completeDelivery
 } = require('../controllers/orderController');
 
 // ============================================
-// CLIENT ROUTES
+// USER ROUTES
 // ============================================
-router.post('/', authenticate, authorize('client'), createOrder);
-router.get('/client', authenticate, authorize('client'), getClientOrders);
-router.get('/number/:orderNumber', authenticate, getOrderByNumber);
+router.post('/', authenticate, authorize('user'), createOrder);
+router.get('/my-orders', authenticate, authorize('user'), getUserOrders);
 router.get('/:id', authenticate, getOrderById);
-router.put('/:id/confirm', authenticate, authorize('client'), confirmDelivery);
-router.put('/:id/cancel', authenticate, authorize('client'), cancelOrder);
-router.get('/:id/track', authenticate, trackOrder);
+router.put('/:id/confirm', authenticate, authorize('user'), confirmDelivery);
 
 // ============================================
 // ADMIN ROUTES
 // ============================================
-router.get('/pending', authenticate, authorize('admin'), getPendingOrders);
-router.get('/all', authenticate, authorize('admin'), getAllOrders);
-router.post('/assign', authenticate, authorize('admin'), assignDelivery);
-router.put('/:id/status', authenticate, authorize('admin'), updateOrderStatus);
-router.get('/stats/overview', authenticate, authorize('admin'), getOrderStats);
-router.get('/stats/revenue', authenticate, authorize('admin'), getRevenueStats);
+router.get('/admin/all', authenticate, authorize('admin'), getAllOrders);
+router.get('/admin/stats', authenticate, authorize('admin'), getOrderStats);
+router.post('/admin/assign-delivery', authenticate, authorize('admin'), assignDelivery);
+router.put('/admin/:id/status', authenticate, authorize('admin'), updateOrderStatus);
+
+// ============================================
+// MANAGER ROUTES
+// ============================================
+router.get('/manager/orders', authenticate, authorize('manager'), getManagerOrders);
+router.put('/manager/:id/status', authenticate, authorize('manager'), updateManagerOrderStatus);
 
 // ============================================
 // DELIVERY ROUTES
 // ============================================
 router.get('/delivery/my-orders', authenticate, authorize('delivery'), getDeliveryOrders);
-router.put('/:id/pickup', authenticate, authorize('delivery'), pickupOrder);
-router.put('/:id/start', authenticate, authorize('delivery'), startDelivery);
-router.put('/:id/complete', authenticate, authorize('delivery'), completeDelivery);
+router.put('/delivery/:id/pickup', authenticate, authorize('delivery'), pickupOrder);
+router.put('/delivery/:id/start', authenticate, authorize('delivery'), startDelivery);
+router.put('/delivery/:id/complete', authenticate, authorize('delivery'), completeDelivery);
 
 module.exports = router;
